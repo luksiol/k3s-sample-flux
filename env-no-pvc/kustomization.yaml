@@ -1,8 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+namespace: sample-apps
 resources:
-  - ../apps/Namespace.yaml
-
   - ../apps/test-app-no-pvc/Secret2.sops.yaml
   - ../apps/test-app-no-pvc/Deployment.yaml
   - ../apps/test-app-no-pvc/Service.yaml
