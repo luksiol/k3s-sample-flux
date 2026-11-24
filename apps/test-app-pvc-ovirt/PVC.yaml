@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: test-app-pvc-ovirt
+  namespace: sample-apps
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ovirt-nvme
+  resources:
+    requests:
+      storage: 3Gi
+

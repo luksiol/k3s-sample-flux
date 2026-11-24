@@ -1,0 +1,198 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-app-customca
+  namespace: sample-apps
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: test-app-customca
+  template:
+    metadata:
+      labels:
+        app: test-app-customca
+    spec:
+      initContainers:
+        - name: merge-ca-bundle
+          image: php:8.2-cli-alpine
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              SYSTEM_CA=/etc/ssl/cert.pem
+              CUSTOM_CA=/etc/ssl/custom-ca/cluster-ca.pem
+              OUTPUT=/merged/ca-certificates.crt
+
+              if [ ! -s "$SYSTEM_CA" ]; then
+                echo "ERROR: System CA bundle missing: $SYSTEM_CA"
+                exit 1
+              fi
+
+              if [ ! -s "$CUSTOM_CA" ]; then
+                echo "ERROR: ClusterTrustBundle missing or empty: $CUSTOM_CA"
+                ls -la /etc/ssl/custom-ca
+                exit 1
+              fi
+
+              cat "$SYSTEM_CA" "$CUSTOM_CA" > "$OUTPUT"
+
+              if [ ! -s "$OUTPUT" ]; then
+                echo "ERROR: Merged CA bundle is empty"
+                exit 1
+              fi
+
+              echo "Merged CA bundle created successfully"
+              echo "Certificate count:"
+              grep -c 'BEGIN CERTIFICATE' "$OUTPUT" || true
+              ls -l "$OUTPUT"
+          volumeMounts:
+            - name: raw-cluster-ca
+              mountPath: /etc/ssl/custom-ca
+              readOnly: true
+            - name: merged-ca-volume
+              mountPath: /merged
+
+      containers:
+        - name: web-server
+          image: php:8.2-cli-alpine
+          env:
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: SSL_CERT_FILE
+              value: /etc/ssl/cert.pem
+            - name: CURL_CA_BUNDLE
+              value: /etc/ssl/cert.pem
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /app
+              date +%s > /app/start.txt
+
+              # Liveness/Readiness probe script
+              cat << 'EOF' > /app/ping.php
+              <?php
+              $startTime = (int)file_get_contents('/app/start.txt');
+              $currentTime = time();
+              if (($currentTime - $startTime) < 10) {
+                  header("HTTP/1.1 500 Internal Server Error");
+                  echo "Rozgrzewanie... " . ($currentTime - $startTime) . "s";
+                  exit;
+              }
+              header("HTTP/1.1 200 OK");
+              echo "OK";
+              EOF
+
+              # Main HTTPS testing application
+              cat << 'EOF' > /app/index.php
+              <?php
+              $nodeName = getenv('K8S_NODE_NAME') ?: 'Node N/A';
+              $podName = gethostname();
+              $clientIp    = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? 'No header X-Forwarded-For';
+              $remoteAddr  = $_SERVER['REMOTE_ADDR'] ?? 'No REMOTE_ADDR';
+              $clientProto = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? 'No header X-Forwarded-Proto';
+              $clientPort  = $_SERVER['HTTP_X_FORWARDED_PORT'] ?? 'No header X-Forwarded-Port';
+
+              $resultOutput = "No request made yet. Enter a URL above and click 'Fetch & Test HTTPS'.";
+              $targetUrl = "";
+
+              if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['url'])) {
+                  $targetUrl = trim($_POST['url']);
+
+                  // Inicjalizacja cURL do testowania HTTPS
+                  $ch = curl_init();
+                  curl_setopt($ch, CURLOPT_URL, $targetUrl);
+                  curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                  curl_setopt($ch, CURLOPT_HEADER, true);
+                  curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+                  curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+                  curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+
+                  $response = curl_exec($ch);
+
+                  if (curl_errno($ch)) {
+                      $error_msg = curl_error($ch);
+                      $resultOutput = "❌ HTTPS Connection Error:\n" . htmlspecialchars($error_msg);
+                  } else {
+                      $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                      $sslVerifyResult = curl_getinfo($ch, CURLINFO_SSL_VERIFYRESULT);
+
+                      $infoBlock = "✅ Success!\n";
+                      $infoBlock .= "HTTP Status Code: " . $httpCode . "\n";
+                      $infoBlock .= "SSL Verify Result: " . ($sslVerifyResult === 0 ? "OK (Valid Certificate)" : "Failed Code: ".$sslVerifyResult) . "\n";
+                      $infoBlock .= "--------------------------------------------------\n\n";
+
+                      $resultOutput = $infoBlock . htmlspecialchars($response);
+                  }
+                  curl_close($ch);
+              }
+              ?>
+              <!DOCTYPE html>
+              <html lang="pl">
+              <head>
+                  <meta charset="UTF-8">
+                  <title>Test-APP - HTTPS CustomCA Tester</title>
+                  <style>
+                      body { font-family: Arial, sans-serif; margin: 30px; line-height: 1.6; }
+                      .info-box { background: #e2e3e5; padding: 10px; border-radius: 5px; margin-bottom: 20px; font-weight: bold; color: #383d41; }
+                      form { margin-bottom: 30px; padding: 15px; background: #f4f4f4; }
+                      input[type="url"] { width: 450px; padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+                      input[type="submit"] { padding: 8px 15px; font-size: 14px; cursor: pointer; background: #28a745; color: white; border: none; border-radius: 3px; font-weight: bold; }
+                      input[type="submit"]:hover { background: #218838; }
+                      pre { background: #222; color: #fff; padding: 15px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; font-family: Consolas, monospace; }
+                  </style>
+              </head>
+              <body>
+                  <h2>GATEWAY - HTTPS Tester with CustomCA</h2>
+                  <div class="info-box">
+                      App is working on k3s node: <span style="color: #d9534f;"><?php echo htmlspecialchars($nodeName); ?> / <?php echo $podName; ?></span>
+                  </div>
+                  <div class="info-box">
+                  <?php
+                  echo "<h3>Info:</h3>";
+                  echo "<ul>";
+                  echo "<li><b>Node (Pod):</b> " . htmlspecialchars($nodeName) . "</li>";
+                  echo "<li><b>X-Forwarded-For:</b> " . htmlspecialchars($clientIp) . "</li>";
+                  echo "<li><b>REMOTE_ADDR:</b> " . htmlspecialchars($remoteAddr) . "</li>";
+                  echo "<li><b>X-Forwarded-Proto:</b> " . htmlspecialchars($clientProto) . "</li>";
+                  echo "<li><b>X-Forwarded-Port:</b> " . htmlspecialchars($clientPort) . "</li>";
+                  echo "</ul>";
+                  ?>
+                  </div>
+
+                  <form method="POST" action="">
+                      <label for="url"><b>Enter HTTPS URL to fetch and test:</b></label><br><br>
+                      <input type="url" id="url" name="url" required placeholder="https://your-secure-internal-api.local" value="<?php echo htmlspecialchars($targetUrl); ?>">
+                      <input type="submit" value="Fetch & Test HTTPS">
+                  </form>
+
+                  <h3>Response / Output:</h3>
+                  <pre><?php echo $resultOutput; ?></pre>
+              </body>
+              </html>
+              EOF
+
+              exec php -S 0.0.0.0:8080 -t /app 2>/dev/null
+          ports:
+            - containerPort: 8080
+              name: http
+          volumeMounts:
+            - name: merged-ca-volume
+              mountPath: /etc/ssl/cert.pem
+              subPath: ca-certificates.crt
+              readOnly: true
+
+      volumes:
+        - name: raw-cluster-ca
+          projected:
+            sources:
+              - clusterTrustBundle:
+                  name: custom-root-ca
+                  path: cluster-ca.pem
+        - name: merged-ca-volume
+          emptyDir: {}
+
+

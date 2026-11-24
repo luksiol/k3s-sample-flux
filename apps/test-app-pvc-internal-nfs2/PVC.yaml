@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: test-app-pvc-internal-nfs2
+  namespace: sample-apps
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-internal2-rwx
+  resources:
+    requests:
+      storage: 1Gi
+

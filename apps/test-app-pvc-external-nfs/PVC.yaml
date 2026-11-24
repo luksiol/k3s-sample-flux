@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: test-app-pvc-external-nfs
+  namespace: sample-apps
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-external-rwx
+  resources:
+    requests:
+      storage: 1Gi
+

@@ -1,0 +1,7 @@
+creation_rules:
+  - path_regex: .*\.(dec|plain)\.yaml$
+    # Age pub key
+    age: "age19fksl3stzr6ys48jdhedytaplfp887p9av7s2jrns0e9g2z9hdxs3vmkrr"
+    # Ecnrypt data or stringData
+    encrypted_regex: "^(data|stringData)$"
+

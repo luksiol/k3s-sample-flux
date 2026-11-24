@@ -1,0 +1,4 @@
+# Block .dec.yaml (plaintext for sops)
+*.dec.yaml
+*.plain.yaml
+

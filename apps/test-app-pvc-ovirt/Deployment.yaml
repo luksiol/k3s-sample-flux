@@ -1,0 +1,143 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-app-pvc-ovirt
+  namespace: sample-apps
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: test-app-pvc-ovirt
+  template:
+    metadata:
+      labels:
+        app: test-app-pvc-ovirt
+    spec:
+      containers:
+        - name: web-server
+          image: php:8.2-cli-alpine
+          env:
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /app
+              date +%s > /app/start.txt
+              cat << 'EOF' > /app/ping.php
+              <?php
+              $startTime = (int)file_get_contents('/app/start.txt');
+              $currentTime = time();
+              if (($currentTime - $startTime) < 10) {
+                  header("HTTP/1.1 500 Internal Server Error");
+                  echo "Starting... " . ($currentTime - $startTime) . "s";
+                  exit;
+              }
+
+              header("HTTP/1.1 200 OK");
+              echo "OK";
+              EOF
+              cat << 'EOF' > /app/index.php
+              <?php
+              $logFile = '/data/log.txt';
+              $nodeName = getenv('K8S_NODE_NAME') ?: 'Node N/A';
+              $secret_nocrypt_1 = getenv('SECRET_NOCRYPT_1') ?: '';
+              $secret_nocrypt_2 = getenv('SECRET_NOCRYPT_2') ?: '';
+              $secret_crypt_1 = getenv('SECRET_CRYPT_1') ?: '';
+              $secret_crypt_2 = getenv('SECRET_CRYPT_2') ?: '';
+              $podName = gethostname();
+              $clientIp    = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? 'No header X-Forwarded-For';
+              $remoteAddr  = $_SERVER['REMOTE_ADDR'] ?? 'No REMOTE_ADDR';
+              $clientProto = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? 'No header  X-Forwarded-Proto';
+              $clientPort  = $_SERVER['HTTP_X_FORWARDED_PORT'] ?? 'No header  X-Forwarded-Port';
+
+
+              $log='';
+              if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+                  $text = isset($_POST['text']) ? trim($_POST['text']) : '';
+                  $log = isset($_POST['log']) ? trim($_POST['log']) : '';
+                  
+                  if (!empty($text)) {
+                      $logEntry = "[" . date('Y-m-d H:i:s') . "] [" . $nodeName . "] " . $text . PHP_EOL;
+                      file_put_contents($logFile, $logEntry, FILE_APPEND);
+                  }
+
+                  if (!empty($log)) {
+                      $stdout = fopen('php://stdout', 'w');
+                      fwrite($stdout, "$log\n");
+                      fclose($stdout);
+                  }
+
+                  
+                  #header("Location: " . $_SERVER['REQUEST_URI']);
+                  #exit;
+              }
+
+              $contentlog = "No entries (log is empty).";
+              if (file_exists($logFile) && filesize($logFile) > 0) {
+                  $contentlog = htmlspecialchars(file_get_contents($logFile));
+              }
+              ?>
+              <!DOCTYPE html>
+              <html lang="pl">
+              <head>
+                  <meta charset="UTF-8">
+                  <title>Test-APP - with OVIRT PVC</title>
+                  <style>
+                      body { font-family: Arial, sans-serif; margin: 30px; line-height: 1.6; }
+                      .info-box { background: #e2e3e5; padding: 10px; border-radius: 5px; margin-bottom: 20px; font-weight: bold; color: #383d41; }
+                      form { margin-bottom: 30px; padding: 15px; background: #f4f4f4; border-radius: 5px; }
+                      input[type="text"] { width: 300px; padding: 8px; font-size: 14px; }
+                      input[type="submit"] { padding: 8px 15px; font-size: 14px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 3px; }
+                      pre { background: #222; color: #fff; padding: 15px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; }
+                  </style>
+              </head>
+              <body>
+                  <h2>GATEWAY - API with OVIRT PVC</h2>
+                  <div class="info-box">
+                      App is working on k3s node: <span style="color: #d9534f;"><?php echo htmlspecialchars($nodeName); ?> / <?php echo $podName; ?></span>
+                  </div>
+                  <div class="info-box">
+                  <?php
+                  echo "<h3>Info:</h3>";
+                  echo "<ul>";
+                  echo "<li><b>Node (Pod):</b> " . htmlspecialchars($nodeName) . "</li>";
+                  echo "<li><b>X-Forwarded-For:</b> " . htmlspecialchars($clientIp) . "</li>";
+                  echo "<li><b>REMOTE_ADDR:</b> " . htmlspecialchars($remoteAddr) . "</li>";
+                  echo "<li><b>X-Forwarded-Proto:</b> " . htmlspecialchars($clientProto) . "</li>";
+                  echo "<li><b>X-Forwarded-Port:</b> " . htmlspecialchars($clientPort) . "</li>";
+                  echo "</ul>";
+                  ?>
+                  </div>
+                  <form method="POST" action="">
+                      <label for="text">Enter text add to log (stdout):</label><br><br>
+                      <textarea type="text" id="log" name="log" rows="10" cols="120"><?php echo $log; ?></textarea>
+                      <input type="submit" value="Save to log">
+                  </form>
+                  <form method="POST" action="">
+                      <label for="text">Enter text add to pvc (PVC test):</label><br><br>
+                      <input type="text" id="texst" name="text" required placeholder="Enter something...">
+                      <input type="submit" value="Save to PVC">
+                  </form>
+
+                  <h3>Actual content of PVC (/data/log.txt):</h3>
+                  <pre><?php echo $contentlog; ?></pre>
+              </body>
+              </html>
+              EOF
+              exec php -S 0.0.0.0:8080 -t /app 2>/dev/null
+          ports:
+            - containerPort: 8080
+              name: http
+          volumeMounts:
+            - name: storage
+              mountPath: /data
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: test-app-pvc-ovirt
+

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-app-pvc-ovirt-service
+  namespace: sample-apps
+spec:
+  ports:
+    - port: 80
+      targetPort: 8080
+  selector:
+    app: test-app-pvc-ovirt
+
+

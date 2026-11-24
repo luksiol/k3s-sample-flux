@@ -1,0 +1,28 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: test-app-pvc-internal-nfs2-route
+  namespace: sample-apps
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: gateway-shared
+      namespace: gateway-system
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /pvc-internal-nfs2
+      backendRefs:
+        - group: ''
+          kind: Service
+          name: test-app-pvc-internal-nfs2-service
+          port: 80
+          weight: 1
+#      sessionPersistence:
+#        sessionName: sesscookie
+#        type: Cookie
+#        absoluteTimeout: 10s
+#        cookieConfig:
+#          lifetimeType: Permanent

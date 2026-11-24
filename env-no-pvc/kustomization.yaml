@@ -1,0 +1,45 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../apps/Namespace.yaml
+
+  - ../apps/test-app-no-pvc/Secret.yaml
+  - ../apps/test-app-no-pvc/Secret2.sops.yaml
+  - ../apps/test-app-no-pvc/Deployment.yaml
+  - ../apps/test-app-no-pvc/Service.yaml
+  - ../apps/test-app-no-pvc/HTTPRoute.yaml
+
+#  - test-app-pvc-internal-nfs1/PVC.yaml
+#  - test-app-pvc-internal-nfs1/Deployment.yaml
+#  - test-app-pvc-internal-nfs1/Service.yaml
+#  - test-app-pvc-internal-nfs1/HTTPRoute.yaml
+
+#  - test-app-pvc-internal-nfs2/PVC.yaml
+#  - test-app-pvc-internal-nfs2/Deployment.yaml
+#  - test-app-pvc-internal-nfs2/Service.yaml
+#  - test-app-pvc-internal-nfs2/HTTPRoute.yaml
+
+#  - test-app-pvc-external-nfs/PVC.yaml
+#  - test-app-pvc-external-nfs/Deployment.yaml
+#  - test-app-pvc-external-nfs/Service.yaml
+#  - test-app-pvc-external-nfs/HTTPRoute.yaml
+
+#  - test-app-pvc-ovirt/PVC.yaml
+#  - test-app-pvc-ovirt/Deployment.yaml
+#  - test-app-pvc-ovirt/Service.yaml
+#  - test-app-pvc-ovirt/HTTPRoute.yaml
+
+#  - test-app-pvc-default/PVC.yaml
+#  - test-app-pvc-default/Deployment.yaml
+#  - test-app-pvc-default/Service.yaml
+#  - test-app-pvc-default/HTTPRoute.yaml
+
+#  - test-app-customca/Deployment.yaml
+#  - test-app-customca/Service.yaml
+#  - test-app-customca/HTTPRoute.yaml
+
+#  - test-app-pvc-vmware/PVC.yaml
+#  - test-app-pvc-vmware/Deployment.yaml
+#  - test-app-pvc-vmware/Service.yaml
+#  - test-app-pvc-vmware/HTTPRoute.yaml
+

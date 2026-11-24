@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-app-pvc-internal-nfs2-service
+  namespace: sample-apps
+spec:
+  ports:
+    - port: 80
+      targetPort: 8080
+  selector:
+    app: test-app-pvc-internal-nfs2
+
